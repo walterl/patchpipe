@@ -25,7 +25,13 @@ class PipeForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
-        startForeground(NOTIFICATION_ID, notification(0))
+        try {
+            startForeground(NOTIFICATION_ID, notification(0))
+        } catch (e: Exception) {
+            android.util.Log.w("PatchpipeService", "startForeground failed", e)
+            stopSelf()
+            return
+        }
         val engine = PatchpipeEngine.from(this)
         scope.launch {
             engine.statuses.collectLatest { statuses ->

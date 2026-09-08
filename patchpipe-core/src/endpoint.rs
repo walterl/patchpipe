@@ -1,6 +1,8 @@
+use std::net::{Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
 use iroh::{
+    dns::{DnsProtocol, DnsResolver},
     endpoint::{presets, Builder},
     Endpoint, RelayMap, RelayMode, RelayUrl, SecretKey,
 };
@@ -18,6 +20,21 @@ pub enum RelayConfig {
     Custom { urls: Vec<String> },
 }
 
+fn public_dns() -> DnsResolver {
+    // Never read system DNS. On Android the default resolver uses JNI and
+    // panics if ndk_context is missing; with panic=abort that kills the app.
+    DnsResolver::builder()
+        .with_nameserver(
+            SocketAddr::from((Ipv4Addr::new(1, 1, 1, 1), 53)),
+            DnsProtocol::Udp,
+        )
+        .with_nameserver(
+            SocketAddr::from((Ipv4Addr::new(8, 8, 8, 8), 53)),
+            DnsProtocol::Udp,
+        )
+        .build()
+}
+
 pub async fn bind_endpoint(
     secret_key: SecretKey,
     listen: bool,
@@ -30,7 +47,8 @@ pub async fn bind_endpoint(
     };
     let mut builder = Endpoint::builder(presets::N0)
         .secret_key(secret_key)
-        .alpns(alpns);
+        .alpns(alpns)
+        .dns_resolver(public_dns());
     builder = apply_relay(builder, relay)?;
     builder
         .bind()

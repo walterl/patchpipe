@@ -48,7 +48,12 @@ class PatchpipeEngine(private val context: Context) {
     val statuses: StateFlow<Map<String, PipeStatus>> = _statuses.asStateFlow()
 
     val nodeId: String
-        get() = factory.nodeId()
+        get() = try {
+            factory.nodeId()
+        } catch (e: Throwable) {
+            Log.w(TAG, "node id unavailable", e)
+            "unavailable"
+        }
 
     init {
         scope.launch(Dispatchers.IO) {
@@ -111,12 +116,12 @@ class PatchpipeEngine(private val context: Context) {
             }
             active[pipe.id] = handle
             _statuses.value = _statuses.value + (pipe.id to handle.status())
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.w(TAG, "failed to start pipe ${pipe.name}", e)
             _statuses.value = _statuses.value + (
                 pipe.id to PipeStatus(
                     state = "error",
-                    lastError = e.message,
+                    lastError = e.message ?: e.javaClass.simpleName,
                     rttMs = null,
                     remoteId = null,
                 )
@@ -137,14 +142,18 @@ class PatchpipeEngine(private val context: Context) {
     private fun syncService() {
         val count = active.size
         val intent = Intent(context, PipeForegroundService::class.java)
-        if (count == 0) {
-            context.stopService(intent)
-            return
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+        try {
+            if (count == 0) {
+                context.stopService(intent)
+                return
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "foreground service start/stop failed", e)
         }
     }
 

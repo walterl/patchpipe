@@ -15,6 +15,14 @@ fn parse_ticket_rejects_garbage() {
 }
 
 #[test]
+fn parse_short_endpoint_ticket() {
+    let ticket = "endpointadh42hgv7ucmfsyxd2sd4mtejk4yqpyrsdut6evvcj2dchfszpga6aa";
+    let info = parse_ticket(ticket.into()).expect("short endpoint ticket should parse");
+    assert!(!info.endpoint_id.is_empty());
+    assert!(info.relay_urls.is_empty());
+}
+
+#[test]
 fn generate_and_parse_secret_roundtrip() {
     let hex = crate::generate_secret_key_hex();
     let id = crate::node_id_from_secret_key(hex.clone()).unwrap();
