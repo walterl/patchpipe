@@ -17,6 +17,9 @@ mod runtime;
 mod session;
 mod tickets;
 
+#[cfg(target_os = "android")]
+mod android;
+
 /// Factory that holds the default secret key used when a pipe does not override it.
 #[derive(uniffi::Object)]
 pub struct PatchpipeEndpoint {

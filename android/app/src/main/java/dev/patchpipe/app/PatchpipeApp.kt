@@ -9,6 +9,11 @@ class PatchpipeApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        try {
+            NativeInit.installIrohDnsContext(this)
+        } catch (e: Throwable) {
+            android.util.Log.w("Patchpipe", "system DNS JNI init failed; Quad9 fallback", e)
+        }
         engine = PatchpipeEngine(this)
     }
 }

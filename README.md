@@ -6,7 +6,9 @@ over an iroh connection.
 
 There is no Patchpipe cloud. Tickets, names, notes, and secret keys stay on the
 device (or on whatever you explicitly share). Default iroh behaviour uses n0
-production relays for NAT traversal, matching desktop dumbpipe. You can
+production relays for NAT traversal, matching desktop dumbpipe. DNS uses the
+device resolver (iroh needs a JNI application context for that on Android).
+If that context is missing, lookups fall back to Quad9 (`9.9.9.9`). You can
 disable relays or set custom relay URLs per pipe. Stream contents are
 end-to-end encrypted; relays see connection metadata, not pipe names or notes.
 

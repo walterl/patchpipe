@@ -1,8 +1,7 @@
-use std::net::{Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
 use iroh::{
-    dns::{DnsProtocol, DnsResolver},
+    dns::DnsResolver,
     endpoint::{presets, Builder},
     Endpoint, RelayMap, RelayMode, RelayUrl, SecretKey,
 };
@@ -20,19 +19,22 @@ pub enum RelayConfig {
     Custom { urls: Vec<String> },
 }
 
-fn public_dns() -> DnsResolver {
-    // Never read system DNS. On Android the default resolver uses JNI and
-    // panics if ndk_context is missing; with panic=abort that kills the app.
-    DnsResolver::builder()
-        .with_nameserver(
-            SocketAddr::from((Ipv4Addr::new(1, 1, 1, 1), 53)),
-            DnsProtocol::Udp,
-        )
-        .with_nameserver(
-            SocketAddr::from((Ipv4Addr::new(8, 8, 8, 8), 53)),
-            DnsProtocol::Udp,
-        )
-        .build()
+fn dns_resolver() -> DnsResolver {
+    #[cfg(target_os = "android")]
+    {
+        if crate::android::system_dns_ready() {
+            return DnsResolver::new();
+        }
+        tracing::warn!("Android JNI DNS context missing; using 9.9.9.9");
+        return DnsResolver::with_nameserver(std::net::SocketAddr::from((
+            std::net::Ipv4Addr::new(9, 9, 9, 9),
+            53,
+        )));
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        DnsResolver::new()
+    }
 }
 
 pub async fn bind_endpoint(
@@ -48,7 +50,7 @@ pub async fn bind_endpoint(
     let mut builder = Endpoint::builder(presets::N0)
         .secret_key(secret_key)
         .alpns(alpns)
-        .dns_resolver(public_dns());
+        .dns_resolver(dns_resolver());
     builder = apply_relay(builder, relay)?;
     builder
         .bind()
