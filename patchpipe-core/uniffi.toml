@@ -1,0 +1,4 @@
+[bindings.kotlin]
+package_name = "dev.patchpipe.core"
+cdylib_name = "patchpipe_core"
+kotlin_multiplatform = false

@@ -1,0 +1,35 @@
+[package]
+name = "patchpipe-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "In-process iroh dumbpipe TCP forwarder for Patchpipe"
+rust-version = "1.91"
+publish = false
+
+[lib]
+name = "patchpipe_core"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+default = []
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+data-encoding = "2"
+iroh = { version = "1.0", default-features = false, features = ["tls-ring"] }
+iroh-tickets = "1.0"
+noq = "1.0"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros"] }
+tokio-util = "0.7"
+tracing = "0.1"
+uniffi = "0.29"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros", "io-std"] }
