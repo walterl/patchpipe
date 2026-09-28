@@ -16,7 +16,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 class PipeForegroundService : Service() {
@@ -25,20 +26,24 @@ class PipeForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
+        val engine = PatchpipeEngine.from(this)
         try {
-            startForeground(NOTIFICATION_ID, notification(0))
+            startForeground(
+                NOTIFICATION_ID,
+                notification(pipeStatusLines(engine.pipes.value, engine.statuses.value)),
+            )
         } catch (e: Exception) {
             android.util.Log.w("PatchpipeService", "startForeground failed", e)
             stopSelf()
             return
         }
-        val engine = PatchpipeEngine.from(this)
         scope.launch {
-            engine.statuses.collectLatest { statuses ->
-                val count = statuses.count { it.value.state != "closed" && it.value.state != "error" }
-                val manager = getSystemService(NotificationManager::class.java)
-                manager.notify(NOTIFICATION_ID, notification(count.coerceAtLeast(1)))
-            }
+            combine(engine.pipes, engine.statuses, ::pipeStatusLines)
+                .distinctUntilChanged()
+                .collect { lines ->
+                    val manager = getSystemService(NotificationManager::class.java)
+                    manager.notify(NOTIFICATION_ID, notification(lines))
+                }
         }
     }
 
@@ -53,7 +58,7 @@ class PipeForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun notification(count: Int): Notification {
+    private fun notification(lines: List<String>): Notification {
         val launch = Intent(this, MainActivity::class.java)
         val pending = PendingIntent.getActivity(
             this,
@@ -61,14 +66,11 @@ class PipeForegroundService : Service() {
             launch,
             PendingIntent.FLAG_IMMUTABLE,
         )
-        val text = if (count == 1) {
-            "1 pipe active"
-        } else {
-            "$count pipes active"
-        }
+        val text = lines.joinToString(" · ").ifEmpty { "No active pipes" }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(lines.joinToString("\n")))
             .setSmallIcon(R.drawable.ic_launcher)
             .setContentIntent(pending)
             .setOngoing(true)
@@ -89,7 +91,7 @@ class PipeForegroundService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "patchpipe_pipes"
+        const val CHANNEL_ID = "patchpipe_pipes"
         private const val NOTIFICATION_ID = 7
     }
 }

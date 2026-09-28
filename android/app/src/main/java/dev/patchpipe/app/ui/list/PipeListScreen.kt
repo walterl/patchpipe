@@ -45,35 +45,35 @@ fun PipeListScreen(
             }
         },
     ) { padding ->
-        if (pipes.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text("No pipes yet.")
-                Text(
-                    "Add a server-mode pipe with a desktop dumbpipe listen-tcp ticket, then point a local app at 127.0.0.1.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(pipes, key = { it.id }) { pipe ->
-                    PipeRow(
-                        pipe = pipe,
-                        status = statuses[pipe.id],
-                        onToggle = { vm.setEnabled(pipe, it) },
-                        onClick = { onEdit(pipe.id) },
+        Column(modifier = Modifier.padding(padding)) {
+            KeepAliveWarnings(modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp))
+            if (pipes.isEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text("No pipes yet.")
+                    Text(
+                        "Add a server-mode pipe with a desktop dumbpipe listen-tcp ticket, then point a local app at 127.0.0.1.",
+                        style = MaterialTheme.typography.bodyMedium,
                     )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(pipes, key = { it.id }) { pipe ->
+                        PipeRow(
+                            pipe = pipe,
+                            status = statuses[pipe.id],
+                            onToggle = { vm.setEnabled(pipe, it) },
+                            onClick = { onEdit(pipe.id) },
+                        )
+                    }
                 }
             }
         }

@@ -78,6 +78,7 @@ class PatchpipeEngine(private val context: Context) {
                 refreshStatuses()
             }
         }
+        watchDefaultNetworkChanges(context) { notifyNetworkChange() }
     }
 
     suspend fun save(pipe: SavedPipe) {
@@ -132,6 +133,12 @@ class PatchpipeEngine(private val context: Context) {
     private fun stopLocked(id: String) {
         active.remove(id)?.stop()
         _statuses.value = _statuses.value - id
+    }
+
+    private fun notifyNetworkChange() {
+        scope.launch(Dispatchers.IO) {
+            mutex.withLock { active.values.forEach { it.networkChange() } }
+        }
     }
 
     private fun refreshStatuses() {

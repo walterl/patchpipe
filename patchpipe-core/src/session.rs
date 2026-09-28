@@ -72,6 +72,14 @@ impl ActivePipe {
         self.status.lock().expect("status mutex").clone()
     }
 
+    /// Tells iroh the device network changed. iroh cannot watch routes on Android itself.
+    pub fn network_change(&self) {
+        let endpoint = self.endpoint.clone();
+        RUNTIME.spawn(async move {
+            endpoint.network_change().await;
+        });
+    }
+
     pub fn stop(&self) {
         self.token.cancel();
         let endpoint = self.endpoint.clone();

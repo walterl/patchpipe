@@ -746,6 +746,8 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -768,6 +770,8 @@ fun uniffi_patchpipe_core_checksum_func_loopback_port_available(
 fun uniffi_patchpipe_core_checksum_func_node_id_from_secret_key(
 ): Short
 fun uniffi_patchpipe_core_checksum_func_parse_ticket(
+): Short
+fun uniffi_patchpipe_core_checksum_method_activepipe_network_change(
 ): Short
 fun uniffi_patchpipe_core_checksum_method_activepipe_node_id(
 ): Short
@@ -841,6 +845,8 @@ internal interface UniffiLib : Library {
     fun uniffi_patchpipe_core_fn_clone_activepipe(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
 fun uniffi_patchpipe_core_fn_free_activepipe(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_patchpipe_core_fn_method_activepipe_network_change(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_patchpipe_core_fn_method_activepipe_node_id(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -1010,6 +1016,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_patchpipe_core_checksum_func_parse_ticket() != 42451.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_patchpipe_core_checksum_method_activepipe_network_change() != 19694.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_patchpipe_core_checksum_method_activepipe_node_id() != 24345.toShort()) {
@@ -1389,6 +1398,11 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
 
 public interface ActivePipeInterface {
     
+    /**
+     * Tells iroh the device network changed. iroh cannot watch routes on Android itself.
+     */
+    fun `networkChange`()
+    
     fun `nodeId`(): kotlin.String
     
     fun `status`(): PipeStatus
@@ -1481,6 +1495,20 @@ open class ActivePipe: Disposable, AutoCloseable, ActivePipeInterface
             UniffiLib.INSTANCE.uniffi_patchpipe_core_fn_clone_activepipe(pointer!!, status)
         }
     }
+
+    
+    /**
+     * Tells iroh the device network changed. iroh cannot watch routes on Android itself.
+     */override fun `networkChange`()
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_patchpipe_core_fn_method_activepipe_network_change(
+        it, _status)
+}
+    }
+    
+    
 
     override fun `nodeId`(): kotlin.String {
             return FfiConverterString.lift(
