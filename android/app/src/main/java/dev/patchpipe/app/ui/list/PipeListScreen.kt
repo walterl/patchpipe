@@ -16,12 +16,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import dev.patchpipe.app.data.PipeMode
 import dev.patchpipe.app.data.SavedPipe
@@ -87,8 +90,10 @@ private fun PipeRow(
     onToggle: (Boolean) -> Unit,
     onClick: () -> Unit,
 ) {
+    val clipboard = LocalClipboardManager.current
     val modeLabel = if (pipe.mode == PipeMode.SERVER) "Server" else "Listener"
     val statusLabel = status?.state ?: if (pipe.enabled) "starting" else "off"
+    val endpoint = "127.0.0.1:${pipe.localPort}"
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -99,11 +104,14 @@ private fun PipeRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(pipe.name, style = MaterialTheme.typography.titleMedium)
             Text(
-                "$modeLabel · 127.0.0.1:${pipe.localPort} · $statusLabel",
+                "$modeLabel · $endpoint · $statusLabel",
                 style = MaterialTheme.typography.bodySmall,
             )
             status?.lastError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
+        TextButton(
+            onClick = { clipboard.setText(AnnotatedString(endpoint)) },
+        ) { Text("Copy") }
         Switch(checked = pipe.enabled, onCheckedChange = onToggle)
     }
 }
