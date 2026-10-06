@@ -18,7 +18,7 @@ class PipeStore(private val context: Context) {
 
     val pipes: Flow<List<SavedPipe>> = context.pipeDataStore.data.map { prefs ->
         val raw = prefs[KEY] ?: return@map emptyList()
-        json.decodeFromString(PipeList.serializer(), raw).pipes
+        json.decodeFromString(PipeList.serializer(), raw).pipes.sortedByName()
     }
 
     suspend fun upsert(pipe: SavedPipe) {
@@ -37,7 +37,8 @@ class PipeStore(private val context: Context) {
             val current = prefs[KEY]?.let {
                 json.decodeFromString(PipeList.serializer(), it).pipes
             } ?: emptyList()
-            prefs[KEY] = json.encodeToString(PipeList.serializer(), PipeList(update(current)))
+            val next = update(current).sortedByName()
+            prefs[KEY] = json.encodeToString(PipeList.serializer(), PipeList(next))
         }
     }
 

@@ -35,3 +35,10 @@ data class SavedPipe(
 data class PipeList(
     val pipes: List<SavedPipe> = emptyList(),
 )
+
+/** Case-insensitive name, then id, so enable/disable does not move a pipe. */
+fun List<SavedPipe>.sortedByName(): List<SavedPipe> {
+    return sortedWith(
+        compareBy<SavedPipe, String>(String.CASE_INSENSITIVE_ORDER) { it.name }.thenBy { it.id },
+    )
+}
