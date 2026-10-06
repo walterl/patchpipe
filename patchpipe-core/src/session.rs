@@ -130,7 +130,12 @@ pub fn start_connect_tcp(
 ) -> Result<Arc<ActivePipe>, PatchpipeError> {
     let parsed = crate::tickets::parse_endpoint_ticket(ticket)?;
     let addr = parsed.endpoint_addr().clone();
-    RUNTIME.block_on(start_connect_tcp_async(secret_key, addr, listen_port, relay))
+    RUNTIME.block_on(start_connect_tcp_async(
+        secret_key,
+        addr,
+        listen_port,
+        relay,
+    ))
 }
 
 pub async fn start_connect_tcp_async(
@@ -232,7 +237,8 @@ async fn connect_tcp_loop(
         let token = token.clone();
         let pipe = pipe.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_tcp_client(tcp_stream, endpoint, addr, token, pipe.clone()).await {
+            if let Err(e) = handle_tcp_client(tcp_stream, endpoint, addr, token, pipe.clone()).await
+            {
                 tracing::warn!("error handling tcp client: {e}");
                 pipe.set_error(e.to_string());
             }

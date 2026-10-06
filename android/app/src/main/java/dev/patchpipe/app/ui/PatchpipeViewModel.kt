@@ -12,7 +12,6 @@ import kotlinx.coroutines.launch
 class PatchpipeViewModel(private val engine: PatchpipeEngine) : ViewModel() {
     val pipes = engine.pipes.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val statuses = engine.statuses
-    val nodeId: String get() = engine.nodeId
 
     fun save(pipe: SavedPipe) {
         viewModelScope.launch { engine.save(pipe) }

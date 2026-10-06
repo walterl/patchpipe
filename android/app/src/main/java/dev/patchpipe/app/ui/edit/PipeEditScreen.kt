@@ -166,6 +166,10 @@ fun PipeEditScreen(
                 label = { Text("Optional static secret key (hex)") },
                 modifier = Modifier.fillMaxWidth(),
             )
+            Text(
+                "Leave this empty unless you need a stable id. Each running pipe needs its own key.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             FilterChip(
                     selected = autoRetry,
                     onClick = { autoRetry = !autoRetry },
@@ -202,10 +206,6 @@ fun PipeEditScreen(
                 onValueChange = { notes = it },
                 label = { Text("Notes") },
                 modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                "This device endpoint id: ${vm.nodeId}",
-                style = MaterialTheme.typography.bodySmall,
             )
             status?.let {
                 Text(

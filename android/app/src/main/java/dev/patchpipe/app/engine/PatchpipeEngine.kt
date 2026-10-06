@@ -8,7 +8,6 @@ import dev.patchpipe.app.PatchpipeApp
 import dev.patchpipe.app.data.PipeMode
 import dev.patchpipe.app.data.PipeStore
 import dev.patchpipe.app.data.SavedPipe
-import dev.patchpipe.app.data.SecretStore
 import dev.patchpipe.app.service.PipeForegroundService
 import dev.patchpipe.app.util.toRelayConfig
 import dev.patchpipe.core.ActivePipe
@@ -31,11 +30,10 @@ import kotlinx.coroutines.withContext
 class PatchpipeEngine(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val store = PipeStore(context)
-    private val secrets = SecretStore(context)
     private val mutex = Mutex()
     private val active = mutableMapOf<String, ActivePipe>()
     private val factory: PatchpipeEndpoint by lazy {
-        PatchpipeEndpoint(secrets.defaultSecretKeyHex())
+        PatchpipeEndpoint(null)
     }
 
     val pipes: StateFlow<List<SavedPipe>> = store.pipes.stateIn(
@@ -46,14 +44,6 @@ class PatchpipeEngine(private val context: Context) {
 
     private val _statuses = MutableStateFlow<Map<String, PipeStatus>>(emptyMap())
     val statuses: StateFlow<Map<String, PipeStatus>> = _statuses.asStateFlow()
-
-    val nodeId: String
-        get() = try {
-            factory.nodeId()
-        } catch (e: Throwable) {
-            Log.w(TAG, "node id unavailable", e)
-            "unavailable"
-        }
 
     init {
         scope.launch(Dispatchers.IO) {

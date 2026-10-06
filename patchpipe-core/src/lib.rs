@@ -20,7 +20,7 @@ mod tickets;
 #[cfg(target_os = "android")]
 mod android;
 
-/// Factory that holds the default secret key used when a pipe does not override it.
+/// Factory for pipes. Each pipe gets its own endpoint key unless one is passed in.
 #[derive(uniffi::Object)]
 pub struct PatchpipeEndpoint {
     secret_key_hex: String,
@@ -53,11 +53,7 @@ impl PatchpipeEndpoint {
         secret_key_override: Option<String>,
     ) -> Result<Arc<ActivePipe>, PatchpipeError> {
         let port = to_port(listen_port)?;
-        let key = secret_key_from_optional(
-            secret_key_override
-                .as_deref()
-                .or(Some(self.secret_key_hex.as_str())),
-        )?;
+        let key = key_for_pipe(secret_key_override.as_deref())?;
         start_connect_tcp(key, &ticket, port, relay)
     }
 
@@ -68,11 +64,7 @@ impl PatchpipeEndpoint {
         secret_key_override: Option<String>,
     ) -> Result<Arc<ActivePipe>, PatchpipeError> {
         let port = to_port(target_port)?;
-        let key = secret_key_from_optional(
-            secret_key_override
-                .as_deref()
-                .or(Some(self.secret_key_hex.as_str())),
-        )?;
+        let key = key_for_pipe(secret_key_override.as_deref())?;
         start_listen_tcp(key, port, relay)
     }
 
@@ -101,6 +93,15 @@ pub fn node_id_from_secret_key(secret_key_hex: String) -> Result<String, Patchpi
 #[uniffi::export]
 pub fn loopback_port_available(port: u32) -> Result<bool, PatchpipeError> {
     Ok(crate::session::loopback_port_available(to_port(port)?))
+}
+
+/// Key for one pipe.
+///
+/// An empty override generates a new key. Pipes must not fall back to the
+/// factory key: a relay keeps a single registration per endpoint id, so every
+/// other pipe sharing that id times out once the registration is replaced.
+fn key_for_pipe(override_hex: Option<&str>) -> Result<iroh::SecretKey, PatchpipeError> {
+    secret_key_from_optional(override_hex)
 }
 
 fn to_port(port: u32) -> Result<u16, PatchpipeError> {

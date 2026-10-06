@@ -14,9 +14,8 @@ pub fn secret_key_hex(key: &SecretKey) -> String {
 
 pub fn parse_secret_key(hex: &str) -> Result<SecretKey, PatchpipeError> {
     let trimmed = hex.trim();
-    SecretKey::from_str(trimmed).map_err(|e| {
-        PatchpipeError::message(format!("invalid secret key: {e}"))
-    })
+    SecretKey::from_str(trimmed)
+        .map_err(|e| PatchpipeError::message(format!("invalid secret key: {e}")))
 }
 
 pub fn secret_key_from_optional(hex: Option<&str>) -> Result<SecretKey, PatchpipeError> {

@@ -67,10 +67,7 @@ pub async fn wait_online(endpoint: &Endpoint, relay: &RelayConfig) {
     }
 }
 
-fn apply_relay(
-    builder: Builder,
-    relay: &RelayConfig,
-) -> Result<Builder, PatchpipeError> {
+fn apply_relay(builder: Builder, relay: &RelayConfig) -> Result<Builder, PatchpipeError> {
     match relay {
         RelayConfig::Default => Ok(builder),
         RelayConfig::Disabled => Ok(builder.relay_mode(RelayMode::Disabled)),
@@ -82,10 +79,9 @@ fn apply_relay(
             }
             let mut parsed = Vec::new();
             for url in urls {
-                parsed.push(
-                    url.parse::<RelayUrl>()
-                        .map_err(|e| PatchpipeError::message(format!("invalid relay URL {url}: {e}")))?,
-                );
+                parsed.push(url.parse::<RelayUrl>().map_err(|e| {
+                    PatchpipeError::message(format!("invalid relay URL {url}: {e}"))
+                })?);
             }
             Ok(builder.relay_mode(RelayMode::Custom(RelayMap::from_iter(parsed))))
         }

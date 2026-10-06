@@ -1693,7 +1693,7 @@ public object FfiConverterTypeActivePipe: FfiConverter<ActivePipe, Pointer> {
 
 
 /**
- * Factory that holds the default secret key used when a pipe does not override it.
+ * Factory for pipes. Each pipe gets its own endpoint key unless one is passed in.
  */
 public interface PatchpipeEndpointInterface {
     
@@ -1711,7 +1711,7 @@ public interface PatchpipeEndpointInterface {
 }
 
 /**
- * Factory that holds the default secret key used when a pipe does not override it.
+ * Factory for pipes. Each pipe gets its own endpoint key unless one is passed in.
  */
 open class PatchpipeEndpoint: Disposable, AutoCloseable, PatchpipeEndpointInterface
 {
