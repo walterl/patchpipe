@@ -292,14 +292,18 @@ async fn listen_tcp_loop(
         let Some(incoming) = incoming else {
             break;
         };
-        let Ok(connecting) = incoming.accept() else {
-            tracing::warn!("incoming.accept failed");
-            continue;
+        let accepting = match incoming.accept() {
+            Ok(accepting) => accepting,
+            Err(err) => {
+                // Garbage on the UDP socket is normal. Keep accepting.
+                tracing::warn!("error accepting connection: {err}");
+                continue;
+            }
         };
         let token = token.clone();
         let pipe = pipe.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_endpoint_accept(connecting, target, token, pipe.clone()).await {
+            if let Err(e) = handle_endpoint_accept(accepting, target, token, pipe.clone()).await {
                 tracing::warn!("error handling incoming stream: {e}");
                 pipe.set_error(e.to_string());
             }

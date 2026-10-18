@@ -26,10 +26,15 @@ fn dns_resolver() -> DnsResolver {
             return DnsResolver::new();
         }
         tracing::warn!("Android JNI DNS context missing; using 9.9.9.9");
-        return DnsResolver::with_nameserver(std::net::SocketAddr::from((
-            std::net::Ipv4Addr::new(9, 9, 9, 9),
-            53,
-        )));
+        // iroh 1.2+ treats an empty fallback list as the default public resolvers.
+        // Quad9 is the only nameserver when the JNI context is missing.
+        let addr = std::net::SocketAddr::from((std::net::Ipv4Addr::new(9, 9, 9, 9), 53));
+        return DnsResolver::builder()
+            .add_nameserver_config(
+                iroh::dns::NameserverConfig::udp(addr.ip()).with_port(addr.port()),
+            )
+            .disable_fallback()
+            .build();
     }
     #[cfg(not(target_os = "android"))]
     {
