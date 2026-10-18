@@ -5,14 +5,21 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import dev.patchpipe.app.PatchpipeApp
+import dev.patchpipe.app.data.AppSettings
+import dev.patchpipe.app.data.DEFAULT_AUTO_START
 import dev.patchpipe.app.data.PipeMode
 import dev.patchpipe.app.data.PipeStore
 import dev.patchpipe.app.data.SavedPipe
 import dev.patchpipe.app.service.PipeForegroundService
+import dev.patchpipe.app.service.setBootReceiverEnabled
+import dev.patchpipe.app.service.shouldStartOnBoot
 import dev.patchpipe.app.util.toRelayConfig
 import dev.patchpipe.core.ActivePipe
 import dev.patchpipe.core.PatchpipeEndpoint
 import dev.patchpipe.core.PipeStatus
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,8 +37,12 @@ import kotlinx.coroutines.withContext
 class PatchpipeEngine(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val store = PipeStore(context)
+    private val settings = AppSettings(context)
     private val mutex = Mutex()
+    private val bootMutex = Mutex()
     private val active = mutableMapOf<String, ActivePipe>()
+    private val activation = AtomicBoolean(false)
+    private val firstSync = CompletableDeferred<Unit>()
     private val factory: PatchpipeEndpoint by lazy {
         PatchpipeEndpoint(null)
     }
@@ -45,21 +56,59 @@ class PatchpipeEngine(private val context: Context) {
     private val _statuses = MutableStateFlow<Map<String, PipeStatus>>(emptyMap())
     val statuses: StateFlow<Map<String, PipeStatus>> = _statuses.asStateFlow()
 
+    val autoStart: StateFlow<Boolean> = settings.autoStart.stateIn(
+        scope,
+        SharingStarted.Eagerly,
+        DEFAULT_AUTO_START,
+    )
+
     init {
         scope.launch(Dispatchers.IO) {
-            pipes.collect { list ->
-                val wanted = list.filter { it.enabled }.map { it.id }.toSet()
-                mutex.withLock {
-                    active.keys.filter { it !in wanted }.forEach { stopLocked(it) }
-                    list.filter { it.enabled }.forEach { pipe ->
-                        if (!active.containsKey(pipe.id)) {
-                            startLocked(pipe)
+            try {
+                bootMutex.withLock {
+                    setBootReceiverEnabled(context, settings.isAutoStartEnabled())
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Log.w(TAG, "failed to sync boot receiver", e)
+            }
+        }
+    }
+
+    /**
+     * Starts enabled pipes and keeps them aligned with the store.
+     *
+     * Opening the app and a restarted foreground service call this. A boot
+     * broadcast does not: that path calls [activateAndAwaitRunning] only when
+     * the user has opted in. Creating the engine must not start pipes, or the
+     * boot process would bring them up with the option still off.
+     */
+    fun activate() {
+        if (!activation.compareAndSet(false, true)) return
+        scope.launch(Dispatchers.IO) {
+            try {
+                store.pipes.collect { list ->
+                    val wanted = list.filter { it.enabled }.map { it.id }.toSet()
+                    mutex.withLock {
+                        active.keys.filter { it !in wanted }.forEach { stopLocked(it) }
+                        list.filter { it.enabled }.forEach { pipe ->
+                            if (!active.containsKey(pipe.id)) {
+                                startLocked(pipe)
+                            }
                         }
                     }
+                    withContext(Dispatchers.Main) {
+                        syncService()
+                        firstSync.complete(Unit)
+                    }
                 }
-                withContext(Dispatchers.Main) {
-                    syncService()
-                }
+            } catch (e: CancellationException) {
+                if (!firstSync.isCompleted) firstSync.completeExceptionally(e)
+                throw e
+            } catch (e: Throwable) {
+                Log.w(TAG, "pipe sync stopped", e)
+                if (!firstSync.isCompleted) firstSync.completeExceptionally(e)
             }
         }
         scope.launch {
@@ -69,6 +118,29 @@ class PatchpipeEngine(private val context: Context) {
             }
         }
         watchDefaultNetworkChanges(context) { notifyNetworkChange() }
+    }
+
+    /** Like [activate], but returns after the first store snapshot has started pipes. */
+    suspend fun activateAndAwaitRunning() {
+        activate()
+        firstSync.await()
+    }
+
+    /**
+     * Starts enabled pipes after unlock when the user opted in.
+     * The receiver stays disabled while the option is off, including after app data is cleared.
+     */
+    suspend fun onBootCompleted(action: String?) {
+        val start = bootMutex.withLock {
+            val autoStart = settings.isAutoStartEnabled()
+            if (!shouldStartOnBoot(autoStart, action)) {
+                if (!autoStart) setBootReceiverEnabled(context, false)
+                false
+            } else {
+                true
+            }
+        }
+        if (start) activateAndAwaitRunning()
     }
 
     suspend fun save(pipe: SavedPipe) {
@@ -83,6 +155,19 @@ class PatchpipeEngine(private val context: Context) {
 
     suspend fun setEnabled(pipe: SavedPipe, enabled: Boolean) {
         store.upsert(pipe.copy(enabled = enabled))
+    }
+
+    suspend fun setAutoStart(enabled: Boolean) {
+        try {
+            bootMutex.withLock {
+                settings.setAutoStart(enabled)
+                setBootReceiverEnabled(context, enabled)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Log.w(TAG, "failed to update boot receiver", e)
+        }
     }
 
     fun ticketFor(id: String): String? {

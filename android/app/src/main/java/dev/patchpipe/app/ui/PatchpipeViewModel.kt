@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 class PatchpipeViewModel(private val engine: PatchpipeEngine) : ViewModel() {
     val pipes = engine.pipes.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val statuses = engine.statuses
+    val autoStart = engine.autoStart
 
     fun save(pipe: SavedPipe) {
         viewModelScope.launch { engine.save(pipe) }
@@ -23,6 +24,10 @@ class PatchpipeViewModel(private val engine: PatchpipeEngine) : ViewModel() {
 
     fun setEnabled(pipe: SavedPipe, enabled: Boolean) {
         viewModelScope.launch { engine.setEnabled(pipe, enabled) }
+    }
+
+    fun setAutoStart(enabled: Boolean) {
+        viewModelScope.launch { engine.setAutoStart(enabled) }
     }
 
     fun ticketFor(id: String): String? = engine.ticketFor(id)

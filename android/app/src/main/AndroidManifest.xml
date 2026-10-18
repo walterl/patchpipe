@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".PatchpipeApp"
@@ -31,5 +32,15 @@
             android:exported="false"
             android:foregroundServiceType="specialUse" />
         <!-- specialUse, not dataSync: dataSync is capped at 6h per 24h on Android 15+. -->
+        <!-- Disabled until the user opts in. specialUse may start from BOOT_COMPLETED. -->
+        <receiver
+            android:name=".service.BootReceiver"
+            android:directBootAware="false"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

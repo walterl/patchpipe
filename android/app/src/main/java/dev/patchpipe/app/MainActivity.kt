@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import dev.patchpipe.app.engine.PatchpipeEngine
 import dev.patchpipe.app.ui.PatchpipeAppUi
 import dev.patchpipe.app.ui.theme.PatchpipeTheme
 
@@ -18,6 +19,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PatchpipeEngine.from(this).activate()
         requestNotificationPermission()
         setContent {
             PatchpipeTheme {
