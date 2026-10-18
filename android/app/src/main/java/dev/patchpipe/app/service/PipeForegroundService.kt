@@ -27,6 +27,7 @@ class PipeForegroundService : Service() {
         super.onCreate()
         ensureChannel()
         val engine = PatchpipeEngine.from(this)
+        engine.activate()
         try {
             startForeground(
                 NOTIFICATION_ID,

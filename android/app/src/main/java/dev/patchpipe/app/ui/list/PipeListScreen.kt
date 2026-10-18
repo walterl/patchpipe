@@ -24,6 +24,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import dev.patchpipe.app.data.PipeMode
@@ -40,6 +42,7 @@ fun PipeListScreen(
 ) {
     val pipes by vm.pipes.collectAsState()
     val statuses by vm.statuses.collectAsState()
+    val autoStart by vm.autoStart.collectAsState()
     Scaffold(
         topBar = { TopAppBar(title = { Text("Patchpipe") }) },
         floatingActionButton = {
@@ -48,12 +51,22 @@ fun PipeListScreen(
             }
         },
     ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+        ) {
             KeepAliveWarnings(modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp))
+            AutoStartRow(
+                checked = autoStart,
+                onCheckedChange = vm::setAutoStart,
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 4.dp),
+            )
             if (pipes.isEmpty()) {
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .weight(1f)
+                        .fillMaxWidth()
                         .padding(24.dp),
                     verticalArrangement = Arrangement.Center,
                 ) {
@@ -65,7 +78,9 @@ fun PipeListScreen(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -80,6 +95,31 @@ fun PipeListScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AutoStartRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text("Start at boot", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "After the phone boots, start pipes that are switched on.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.semantics { contentDescription = "Start at boot" },
+        )
     }
 }
 
