@@ -2,14 +2,19 @@ package dev.patchpipe.app.engine
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import dev.patchpipe.app.PatchpipeApp
 import dev.patchpipe.app.data.AppSettings
+import dev.patchpipe.app.data.ConfigBackup
 import dev.patchpipe.app.data.DEFAULT_AUTO_START
+import dev.patchpipe.app.data.InvalidConfigException
 import dev.patchpipe.app.data.PipeMode
 import dev.patchpipe.app.data.PipeStore
 import dev.patchpipe.app.data.SavedPipe
+import dev.patchpipe.app.data.decodeConfigBackup
+import dev.patchpipe.app.data.encodeConfigBackup
 import dev.patchpipe.app.service.PipeForegroundService
 import dev.patchpipe.app.service.setBootReceiverEnabled
 import dev.patchpipe.app.service.shouldStartOnBoot
@@ -17,6 +22,9 @@ import dev.patchpipe.app.util.toRelayConfig
 import dev.patchpipe.core.ActivePipe
 import dev.patchpipe.core.PatchpipeEndpoint
 import dev.patchpipe.core.PipeStatus
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.io.InputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -28,6 +36,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -170,6 +179,32 @@ class PatchpipeEngine(private val context: Context) {
         }
     }
 
+    /** Writes every pipe and app setting to [uri]. Returns the number of pipes written. */
+    suspend fun exportConfig(uri: Uri): Int = withContext(Dispatchers.IO) {
+        val pipes = store.pipes.first()
+        val text = encodeConfigBackup(pipes, settings.isAutoStartEnabled())
+        val out = context.contentResolver.openOutputStream(uri, "wt")
+            ?: throw IOException("Could not open the file.")
+        out.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+        pipes.size
+    }
+
+    /** Reads and checks a file from [exportConfig] without applying it. */
+    suspend fun readConfig(uri: Uri): ConfigBackup = withContext(Dispatchers.IO) {
+        val input = context.contentResolver.openInputStream(uri)
+            ?: throw IOException("Could not open the file.")
+        val bytes = input.use { it.readNBytesCompat(MAX_CONFIG_BYTES + 1) }
+        if (bytes.size > MAX_CONFIG_BYTES) {
+            throw InvalidConfigException("The file is too large to be a Patchpipe config.")
+        }
+        decodeConfigBackup(bytes.toString(Charsets.UTF_8))
+    }
+
+    suspend fun importConfig(backup: ConfigBackup) {
+        store.importPipes(backup.pipes)
+        backup.autoStart?.let { setAutoStart(it) }
+    }
+
     fun ticketFor(id: String): String? {
         return active[id]?.ticket()
     }
@@ -241,6 +276,7 @@ class PatchpipeEngine(private val context: Context) {
 
     companion object {
         private const val TAG = "PatchpipeEngine"
+        private const val MAX_CONFIG_BYTES = 1 shl 20
 
         fun from(context: Context): PatchpipeEngine {
             return (context.applicationContext as PatchpipeApp).engine
@@ -248,5 +284,14 @@ class PatchpipeEngine(private val context: Context) {
     }
 }
 
-
-
+/** InputStream.readNBytes needs API 33; minSdk is 26. */
+private fun InputStream.readNBytesCompat(limit: Int): ByteArray {
+    val out = ByteArrayOutputStream()
+    val buf = ByteArray(8192)
+    while (out.size() < limit) {
+        val n = read(buf, 0, minOf(buf.size, limit - out.size()))
+        if (n < 0) break
+        out.write(buf, 0, n)
+    }
+    return out.toByteArray()
+}
