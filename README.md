@@ -56,6 +56,10 @@ The debug APK is `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 - No analytics, crash reporting, or accounts.
 - Pipe config is DataStore JSON on device.
+- **Export** writes all pipes and app settings to a JSON file you choose.
+  The file holds tickets and secret keys in plain text; keep it private.
+  **Import** adds the pipes in such a file and replaces pipes with the same
+  id. New pipes start switched off.
 - The default endpoint secret is stored in EncryptedSharedPreferences
   (Android Keystore).
 - Sharing a listener ticket uses the system share sheet (local). The ticket

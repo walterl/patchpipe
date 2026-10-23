@@ -32,6 +32,10 @@ class PipeStore(private val context: Context) {
         mutate { current -> current.filterNot { it.id == id } }
     }
 
+    suspend fun importPipes(imported: List<SavedPipe>) {
+        mutate { current -> mergeImportedPipes(current, imported) }
+    }
+
     private suspend fun mutate(update: (List<SavedPipe>) -> List<SavedPipe>) {
         context.pipeDataStore.edit { prefs ->
             val current = prefs[KEY]?.let {
