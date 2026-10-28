@@ -1,5 +1,7 @@
 # Patchpipe
 
+[![ci](https://github.com/walterl/patchpipe/actions/workflows/ci.yml/badge.svg)](https://github.com/walterl/patchpipe/actions/workflows/ci.yml)
+
 Access services running anywhere from your Android device, through end-to-end
 encrypted, single socket channels. No firewall changes required.
 
