@@ -93,6 +93,9 @@ The app runs on Android 8.0 and newer (`minSdk` 26).
 
 ## F-Droid / reproducible builds
 
+Patchpipe APKs are not released on any app store. Open source stores will be
+considered if there are community requests.
+
 NDK version is pinned in Gradle (`27.1.12297006`). Generated Kotlin bindings
 are committed. Native libraries are built from this tree, not downloaded.
 Release `.so` files are stripped; generate bindings from a debug build.
