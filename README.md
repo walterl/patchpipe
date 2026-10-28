@@ -12,6 +12,8 @@ If that context is missing, lookups fall back to Quad9 (`9.9.9.9`). You can
 disable relays or set custom relay URLs per pipe. Stream contents are
 end-to-end encrypted; relays see connection metadata, not pipe names or notes.
 
+![Patchpipe main screen with one listener running and one pipe switched off](docs/screenshot-main.png)
+
 ## Modes
 
 - **Server:** listen on `127.0.0.1:<port>` and dial the remote named in a
@@ -20,6 +22,18 @@ end-to-end encrypted; relays see connection metadata, not pipe names or notes.
   service (`dumbpipe listen-tcp`).
 
 Local TCP is bound to loopback only.
+
+## Background operation
+
+- Enabled pipes run in a foreground service with a notification showing each
+  pipe's state, so they keep forwarding while the app is not on screen. When no
+  pipe is enabled the service stops.
+- The engine watches the default network (Wi-Fi to cellular) and pokes every
+  active pipe when it switches.
+- **Start at boot** is opt-in and off by default; only then does a boot
+  broadcast bring enabled pipes back up.
+- The pipe list warns when battery optimization or disabled notifications would
+  keep pipes from staying up (or hide their status) and links to the settings.
 
 ## Build
 
@@ -51,17 +65,19 @@ cd android
 The debug APK is `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 `./gradlew assembleDebug` also runs `cargo ndk` for `arm64-v8a` and `x86_64`.
+The app runs on Android 8.0 and newer (`minSdk` 26).
 
 ## Privacy
 
 - No analytics, crash reporting, or accounts.
-- Pipe config is DataStore JSON on device.
+- Pipe config is DataStore JSON in the app's private storage, including each
+  pipe's secret key in plain text. Every pipe gets its own key: a relay keeps a
+  single registration per endpoint id, so pipes sharing one key would drop each
+  other.
 - **Export** writes all pipes and app settings to a JSON file you choose.
   The file holds tickets and secret keys in plain text; keep it private.
   **Import** adds the pipes in such a file and replaces pipes with the same
   id. New pipes start switched off.
-- The default endpoint secret is stored in EncryptedSharedPreferences
-  (Android Keystore).
 - Sharing a listener ticket uses the system share sheet (local). The ticket
   itself is how a peer finds you; do not post it publicly.
 
