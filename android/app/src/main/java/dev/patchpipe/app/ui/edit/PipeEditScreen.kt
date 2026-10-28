@@ -11,14 +11,20 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -68,7 +74,9 @@ fun PipeEditScreen(
             TopAppBar(
                 title = { Text(if (existing == null) "New pipe" else "Edit pipe") },
                 navigationIcon = {
-                    TextButton(onClick = onBack) { Text("Back") }
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
                 },
             )
         },
@@ -95,11 +103,19 @@ fun PipeEditScreen(
                     selected = mode == PipeMode.SERVER,
                     onClick = { mode = PipeMode.SERVER },
                     label = { Text("Server") },
+                    enabled = existing == null,
                 )
                 FilterChip(
                     selected = mode == PipeMode.LISTENER,
                     onClick = { mode = PipeMode.LISTENER },
                     label = { Text("Listener") },
+                    enabled = existing == null,
+                )
+            }
+            if (existing != null) {
+                Text(
+                    "Pipe type can't be changed after creation.",
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
             OutlinedTextField(
@@ -119,24 +135,28 @@ fun PipeEditScreen(
                     label = { Text("Ticket") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
-                )
-                TextButton(
-                    onClick = {
-                        try {
-                            val info = parseTicket(ticket)
-                            val relays = if (info.relayUrls.isEmpty()) {
-                                "no relay URLs in ticket"
-                            } else {
-                                info.relayUrls.joinToString()
-                            }
-                            ticketInfo = "Remote ${info.endpointId}\n$relays"
-                            ticketError = null
-                        } catch (e: PatchpipeException) {
-                            ticketError = e.message
-                            ticketInfo = null
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                try {
+                                    val info = parseTicket(ticket)
+                                    val relays = if (info.relayUrls.isEmpty()) {
+                                        "no relay URLs in ticket"
+                                    } else {
+                                        info.relayUrls.joinToString()
+                                    }
+                                    ticketInfo = "Remote ${info.endpointId}\n$relays"
+                                    ticketError = null
+                                } catch (e: PatchpipeException) {
+                                    ticketError = e.message
+                                    ticketInfo = null
+                                }
+                            },
+                        ) {
+                            Icon(Icons.Filled.Check, contentDescription = "Validate ticket")
                         }
                     },
-                ) { Text("Validate ticket") }
+                )
                 ticketInfo?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 ticketError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             } else {
@@ -147,7 +167,7 @@ fun PipeEditScreen(
                         connectTcpCommand(shareTicket),
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Button(
+                    IconButton(
                         onClick = {
                             val send = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
@@ -155,7 +175,9 @@ fun PipeEditScreen(
                             }
                             context.startActivity(Intent.createChooser(send, "Share ticket"))
                         },
-                    ) { Text("Share ticket") }
+                    ) {
+                        Icon(Icons.Filled.Share, contentDescription = "Share ticket")
+                    }
                 } else {
                     Text("Activate this listener to produce a ticket.")
                 }
@@ -241,11 +263,12 @@ fun PipeEditScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save") }
             if (existing != null) {
-                TextButton(
+                FilledTonalButton(
                     onClick = {
                         vm.delete(existing.id)
                         onBack()
                     },
+                    modifier = Modifier.fillMaxWidth(),
                 ) { Text("Delete") }
             }
         }
