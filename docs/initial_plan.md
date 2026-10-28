@@ -1,6 +1,8 @@
-# Patchpipe — Android App Plan
+# Patchpipe — Initial Plan
 
-Status: plan only (no code written yet)
+Status: written before any code existed, and kept as a record of the original
+design reasoning. The app has since been built; see the README for what
+actually shipped.
 Source: https://dumbpipe.dev / https://github.com/n0-computer/dumbpipe
 
 ## 1. What it does
