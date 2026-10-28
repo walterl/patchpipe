@@ -27,7 +27,10 @@ Local TCP is bound to loopback only.
 
 - Enabled pipes run in a foreground service with a notification showing each
   pipe's state, so they keep forwarding while the app is not on screen. When no
-  pipe is enabled the service stops.
+  pipe is running or waiting to retry, the service stops.
+- Saving new connection settings (port, ticket, key, relays) restarts a running
+  pipe. A pipe that fails to start is retried with backoff (2 s doubling to
+  60 s) while it is enabled and **Auto-retry** is on.
 - The engine watches the default network (Wi-Fi to cellular) and pokes every
   active pipe when it switches.
 - **Start at boot** is opt-in and off by default; only then does a boot

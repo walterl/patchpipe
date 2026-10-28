@@ -27,9 +27,9 @@ import java.io.IOException
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,20 +38,34 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class PatchpipeEngine(private val context: Context) {
+    private class Running(val handle: ActivePipe, val connection: PipeConnection)
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val store = PipeStore(context)
     private val settings = AppSettings(context)
+
+    /** Guards [active], [retries] and [wanted]. Read them only while holding it. */
     private val mutex = Mutex()
     private val bootMutex = Mutex()
-    private val active = mutableMapOf<String, ActivePipe>()
+    private val active = mutableMapOf<String, Running>()
+    private val retries = mutableMapOf<String, Job>()
+    private var wanted = emptyMap<String, SavedPipe>()
+
+    /** Immutable copy of [active] for synchronous reads such as [ticketFor]. */
+    @Volatile
+    private var activeSnapshot = emptyMap<String, ActivePipe>()
+
+    /** Running pipes plus pending retries; the service runs while this is above zero. */
+    @Volatile
+    private var serviceCount = 0
     private val activation = AtomicBoolean(false)
-    private val firstSync = CompletableDeferred<Unit>()
     private val factory: PatchpipeEndpoint by lazy {
         PatchpipeEndpoint(null)
     }
@@ -89,38 +103,26 @@ class PatchpipeEngine(private val context: Context) {
      * Starts enabled pipes and keeps them aligned with the store.
      *
      * Opening the app and a restarted foreground service call this. A boot
-     * broadcast does not: that path calls [activateAndAwaitRunning] only when
-     * the user has opted in. Creating the engine must not start pipes, or the
-     * boot process would bring them up with the option still off.
+     * broadcast does not: that path calls [onBootCompleted], which starts the
+     * service only when the user has opted in. Creating the engine must not
+     * start pipes, or the boot process would bring them up with the option still off.
+     *
+     * Running pipes always match the store: a pipe whose connection settings
+     * change is restarted, and a pipe that fails to start is retried with
+     * backoff while it stays enabled with auto-retry on.
      */
     fun activate() {
         if (!activation.compareAndSet(false, true)) return
         scope.launch(Dispatchers.IO) {
             try {
-                store.pipes.collect { list ->
-                    val wanted = list.filter { it.enabled }.map { it.id }.toSet()
-                    mutex.withLock {
-                        active.keys.filter { it !in wanted }.forEach { stopLocked(it) }
-                        list.filter { it.enabled }.forEach { pipe ->
-                            if (!active.containsKey(pipe.id)) {
-                                startLocked(pipe)
-                            }
-                        }
-                    }
-                    withContext(Dispatchers.Main) {
-                        syncService()
-                        firstSync.complete(Unit)
-                    }
-                }
+                store.pipes.collect { list -> reconcile(list) }
             } catch (e: CancellationException) {
-                if (!firstSync.isCompleted) firstSync.completeExceptionally(e)
                 throw e
             } catch (e: Throwable) {
                 Log.w(TAG, "pipe sync stopped", e)
-                if (!firstSync.isCompleted) firstSync.completeExceptionally(e)
             }
         }
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             while (true) {
                 delay(1_000)
                 refreshStatuses()
@@ -129,15 +131,12 @@ class PatchpipeEngine(private val context: Context) {
         watchDefaultNetworkChanges(context) { notifyNetworkChange() }
     }
 
-    /** Like [activate], but returns after the first store snapshot has started pipes. */
-    suspend fun activateAndAwaitRunning() {
-        activate()
-        firstSync.await()
-    }
-
     /**
      * Starts enabled pipes after unlock when the user opted in.
      * The receiver stays disabled while the option is off, including after app data is cleared.
+     *
+     * The foreground service starts first, so pipe startup (which can wait on
+     * the network) runs under its protection instead of the receiver's short lifetime.
      */
     suspend fun onBootCompleted(action: String?) {
         val start = bootMutex.withLock {
@@ -149,7 +148,11 @@ class PatchpipeEngine(private val context: Context) {
                 true
             }
         }
-        if (start) activateAndAwaitRunning()
+        if (!start) return
+        if (store.pipes.first().any { it.enabled }) {
+            withContext(Dispatchers.Main) { syncService(forceStart = true) }
+        }
+        activate()
     }
 
     suspend fun save(pipe: SavedPipe) {
@@ -157,7 +160,10 @@ class PatchpipeEngine(private val context: Context) {
     }
 
     suspend fun delete(id: String) {
-        mutex.withLock { stopLocked(id) }
+        mutex.withLock {
+            wanted = wanted - id
+            stopLocked(id)
+        }
         store.delete(id)
         withContext(Dispatchers.Main) { syncService() }
     }
@@ -206,11 +212,75 @@ class PatchpipeEngine(private val context: Context) {
     }
 
     fun ticketFor(id: String): String? {
-        return active[id]?.ticket()
+        return activeSnapshot[id]?.ticket()
     }
 
-    private fun startLocked(pipe: SavedPipe) {
-        try {
+    private suspend fun reconcile(list: List<SavedPipe>) {
+        mutex.withLock {
+            val enabled = list.filter { it.enabled }
+            val previous = wanted
+            wanted = enabled.associateBy { it.id }
+            (active.keys + retries.keys)
+                .filter { it !in wanted }
+                .forEach { stopLocked(it) }
+            enabled.forEach { pipe ->
+                val current = active[pipe.id]
+                when {
+                    current == null -> {
+                        // A pending retry keeps its backoff unless this pipe was edited.
+                        if (retries[pipe.id] == null || previous[pipe.id] != pipe) {
+                            retries.remove(pipe.id)?.cancel()
+                            if (!startLocked(pipe) && pipe.autoRetry) scheduleRetryLocked(pipe.id)
+                        }
+                    }
+                    current.connection != pipe.connection() -> {
+                        stopLocked(pipe.id)
+                        // The old handle releases its port and key asynchronously, so a
+                        // restart gets a few retries even with auto-retry off.
+                        if (!startLocked(pipe)) {
+                            scheduleRetryLocked(pipe.id, minAttempts = RESTART_ATTEMPTS)
+                        }
+                    }
+                }
+            }
+            publishLocked()
+        }
+        withContext(Dispatchers.Main) { syncService() }
+    }
+
+    /**
+     * Retries starting [id] with backoff until it runs or is no longer wanted.
+     * It tries at least [minAttempts] times, and keeps going while auto-retry is on.
+     */
+    private fun scheduleRetryLocked(id: String, minAttempts: Int = 0) {
+        retries[id] = scope.launch(Dispatchers.IO) {
+            val self = coroutineContext[Job]
+            var attempt = 0
+            while (true) {
+                delay(retryDelayMs(attempt++))
+                val done = mutex.withLock {
+                    val pipe = wanted[id]
+                    when {
+                        retries[id] !== self || pipe == null || active.containsKey(id) -> true
+                        startLocked(pipe) -> true
+                        pipe.autoRetry -> false
+                        else -> attempt >= minAttempts
+                    }
+                }
+                if (done) break
+            }
+            mutex.withLock {
+                if (retries[id] === self) retries.remove(id)
+                publishLocked()
+            }
+            withContext(Dispatchers.Main) { syncService() }
+        }
+        publishLocked()
+    }
+
+    /** Returns true if the pipe is now running. */
+    private fun startLocked(pipe: SavedPipe): Boolean {
+        return try {
             val override = pipe.secretKeyHex.trim().ifEmpty { null }
             val handle = when (pipe.mode) {
                 PipeMode.SERVER -> factory.connectTcpLoopback(
@@ -225,39 +295,58 @@ class PatchpipeEngine(private val context: Context) {
                     override,
                 )
             }
-            active[pipe.id] = handle
-            _statuses.value = _statuses.value + (pipe.id to handle.status())
+            active[pipe.id] = Running(handle, pipe.connection())
+            publishLocked()
+            _statuses.update { it + (pipe.id to handle.status()) }
+            true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Throwable) {
             Log.w(TAG, "failed to start pipe ${pipe.name}", e)
-            _statuses.value = _statuses.value + (
-                pipe.id to PipeStatus(
-                    state = "error",
-                    lastError = e.message ?: e.javaClass.simpleName,
-                    rttMs = null,
-                    remoteId = null,
-                )
+            val status = PipeStatus(
+                state = "error",
+                lastError = e.message ?: e.javaClass.simpleName,
+                rttMs = null,
+                remoteId = null,
             )
+            _statuses.update { it + (pipe.id to status) }
+            false
         }
     }
 
     private fun stopLocked(id: String) {
-        active.remove(id)?.stop()
-        _statuses.value = _statuses.value - id
+        retries.remove(id)?.cancel()
+        active.remove(id)?.handle?.stop()
+        publishLocked()
+        _statuses.update { it - id }
+    }
+
+    /** Publishes lock-free copies of the running set for UI reads and [syncService]. */
+    private fun publishLocked() {
+        activeSnapshot = active.mapValues { it.value.handle }
+        // Pending retries keep the service up so the process survives until they run.
+        serviceCount = active.size + retries.size
     }
 
     private fun notifyNetworkChange() {
         scope.launch(Dispatchers.IO) {
-            mutex.withLock { active.values.forEach { it.networkChange() } }
+            mutex.withLock { active.values.forEach { it.handle.networkChange() } }
         }
     }
 
-    private fun refreshStatuses() {
-        val next = active.mapValues { it.value.status() }
-        _statuses.value = _statuses.value + next
+    private suspend fun refreshStatuses() {
+        mutex.withLock {
+            val next = active.mapValues { it.value.handle.status() }
+            _statuses.update { it + next }
+        }
     }
 
-    private fun syncService() {
-        val count = active.size
+    /**
+     * Starts or stops the foreground service to match the latest [serviceCount].
+     * Callers update the count under [mutex] first, so the last call always sees the newest value.
+     */
+    private fun syncService(forceStart: Boolean = false) {
+        val count = if (forceStart) 1 else serviceCount
         val intent = Intent(context, PipeForegroundService::class.java)
         try {
             if (count == 0) {
@@ -277,6 +366,7 @@ class PatchpipeEngine(private val context: Context) {
     companion object {
         private const val TAG = "PatchpipeEngine"
         private const val MAX_CONFIG_BYTES = 1 shl 20
+        private const val RESTART_ATTEMPTS = 3
 
         fun from(context: Context): PatchpipeEngine {
             return (context.applicationContext as PatchpipeApp).engine
