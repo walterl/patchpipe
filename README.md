@@ -1,16 +1,15 @@
 # Patchpipe
 
-Android app that runs [dumbpipe](https://dumbpipe.dev) TCP forwarders on the
-device. Plug a local app into `127.0.0.1:<port>`; Patchpipe routes the bytes
-over an iroh connection.
+Access services running anywhere from your Android device, through end-to-end
+encrypted, single socket channels. No firewall changes required.
+
+Patchpipe is an Android app that runs [dumbpipe](https://dumbpipe.dev) TCP
+forwarders on the device. Plug a local app into `127.0.0.1:<port>`; Patchpipe
+routes the bytes over an iroh connection.
 
 There is no Patchpipe cloud. Tickets, names, notes, and secret keys stay on the
-device (or on whatever you explicitly share). Default iroh behaviour uses n0
-production relays for NAT traversal, matching desktop dumbpipe 0.40. DNS uses the
-device resolver (iroh needs a JNI application context for that on Android).
-If that context is missing, lookups fall back to Quad9 (`9.9.9.9`). You can
-disable relays or set custom relay URLs per pipe. Stream contents are
-end-to-end encrypted; relays see connection metadata, not pipe names or notes.
+device. Stream contents are end-to-end encrypted; relays see connection
+metadata, not pipe names or notes.
 
 ![Patchpipe main screen with one listener running and one pipe switched off](docs/screenshot-main.png)
 
@@ -25,6 +24,12 @@ Local TCP is bound to loopback only.
 
 ## Background operation
 
+- Default iroh behaviour uses n0 production relays for NAT traversal, matching
+  desktop dumbpipe 0.40. You can disable relays or set custom relay URLs per
+  pipe.
+- DNS uses the device resolver (iroh needs a JNI application context for that
+  on Android). If that context is missing, lookups fall back to Quad9
+  (`9.9.9.9`).
 - Enabled pipes run in a foreground service with a notification showing each
   pipe's state, so they keep forwarding while the app is not on screen. When no
   pipe is running or waiting to retry, the service stops.
