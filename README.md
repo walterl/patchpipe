@@ -13,7 +13,7 @@ There is no Patchpipe cloud. Tickets, names, notes, and secret keys stay on the
 device. Stream contents are end-to-end encrypted; relays see connection
 metadata, not pipe names or notes.
 
-![Patchpipe main screen with one listener running and one pipe switched off](docs/screenshot-main.png)
+<img src="docs/screenshot-main.png" alt="Patchpipe main screen with one listener running and one pipe switched off" height="250">
 
 ## Modes
 
