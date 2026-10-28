@@ -68,9 +68,10 @@ fun decodeConfigBackup(text: String): ConfigBackup {
 /**
  * Adds imported pipes and replaces pipes with the same id. Other pipes stay.
  *
- * Imported pipes do not change what is running: a replaced pipe keeps its
- * on/off state, and a new one starts off. The same key may still be in use
- * on the device the file came from.
+ * Imported pipes do not turn anything on or off: a replaced pipe keeps its
+ * on/off state, and a new one starts off. A replaced pipe that is running
+ * restarts if its connection settings changed. The same key may still be in
+ * use on the device the file came from.
  */
 fun mergeImportedPipes(current: List<SavedPipe>, imported: List<SavedPipe>): List<SavedPipe> {
     val byId = current.associateBy { it.id }.toMutableMap()
